@@ -1,3 +1,6 @@
+#  Copyright 2024 by REDxEYE.
+#  All rights reserved.
+
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterator
@@ -19,7 +22,7 @@ class DatArchive:
         self.entries: Dict[str, CatEntry] = {}
         self.path = path
         self.buffer = FileBuffer(path)
-        if self.buffer.size() < 1024*1024*1024:
+        if self.buffer.size() < 1024 * 1024 * 1024:
             self.buffer = self.buffer.slice()
         if self.path.with_suffix(".cat").exists():
             running_offset = 0

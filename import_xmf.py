@@ -1,3 +1,7 @@
+#  Copyright 2024 by REDxEYE.
+#  All rights reserved.
+
+
 import bpy
 import numpy as np
 

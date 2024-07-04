@@ -1,3 +1,6 @@
+#  Copyright 2024 by REDxEYE.
+#  All rights reserved.
+
 import random
 from pathlib import Path
 from typing import cast

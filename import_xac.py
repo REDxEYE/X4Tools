@@ -1,3 +1,6 @@
+#  Copyright 2024 by REDxEYE.
+#  All rights reserved.
+
 from collections import defaultdict
 from enum import Enum
 from pathlib import Path

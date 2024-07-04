@@ -1,3 +1,6 @@
+#  Copyright 2024 by REDxEYE.
+#  All rights reserved.
+
 from typing import Optional
 
 import bpy

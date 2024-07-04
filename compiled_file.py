@@ -1,4 +1,8 @@
-import math
+#  Copyright 2024 by REDxEYE.
+#  All rights reserved.
+
+
+#
 import warnings
 from collections import defaultdict
 from dataclasses import dataclass, field

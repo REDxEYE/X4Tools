@@ -1,3 +1,7 @@
+#  Copyright 2024 by REDxEYE.
+#  All rights reserved.
+
+
 from pathlib import Path
 
 import bpy

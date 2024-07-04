@@ -1,3 +1,6 @@
+#  Copyright 2024 by REDxEYE.
+#  All rights reserved.
+
 from typing import List
 
 from x4.compiled_file import CompiledFile, CompiledHeader, ActorChunkId, Nodes, Mesh, SkinningInfo, StdMaterial, Node
@@ -27,7 +30,7 @@ class CompiledModel(CompiledFile):
             if mesh.node_id == node.id:
                 return mesh
 
-    def get_skinning_info_by_node(self, node: Node) -> SkinningInfo|None:
+    def get_skinning_info_by_node(self, node: Node) -> SkinningInfo | None:
         skinning_infos = self.get_skinning_infos()
         for skinning_info in skinning_infos:
             if skinning_info.node_id == node.id:

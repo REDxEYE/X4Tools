@@ -1,3 +1,6 @@
+#  Copyright 2024 by REDxEYE.
+#  All rights reserved.
+
 from dataclasses import dataclass, field
 from enum import IntEnum
 
@@ -54,7 +57,7 @@ class CompressedBuffer:
 
     # struct{int a,b;}unk14[16];
 
-    data: bytes = field(init=False, default=b"",repr=False)
+    data: bytes = field(init=False, default=b"", repr=False)
 
     @classmethod
     def from_buffer(cls, buffer: Buffer):
@@ -88,6 +91,7 @@ class MaterialStrip:
     def from_buffer(cls, buffer: Buffer):
         return cls(buffer.read_uint32(), buffer.read_uint32(), buffer.read_ascii_string(128))
 
+
 @dataclass
 class StaticModel:
     buffers: list[CompressedBuffer]
@@ -118,4 +122,4 @@ class StaticModel:
             buffer.seek(compressed_offset + compressed_buffer.c_offset)
             compressed_buffer.data = decompress(buffer.read(compressed_buffer.c_size))
 
-        return cls(compressed_buffers,strips, vertex_count,index_count)
+        return cls(compressed_buffers, strips, vertex_count, index_count)
