@@ -184,7 +184,7 @@ def import_actor(cf, path):
             if morph_targets:
                 mesh_obj.shape_key_add(name='base')
                 for morph_target in morph_targets:
-                    for morph in morph_target:
+                    for morph in morph_target.targets:
                         for deform in morph.deformations:
                             if deform.node_id != mesh.node_id:
                                 continue

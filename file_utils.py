@@ -39,6 +39,11 @@ class Buffer(abc.ABC, io.RawIOBase):
         string = self.read_ascii_string(size)
         return string
 
+    def write_sized_string(self, string: str):
+        self.write_uint32(len(string))
+        if string:
+            self.write_ascii_string(string)
+
     @property
     @abc.abstractmethod
     def data(self):
