@@ -7,7 +7,7 @@ from pathlib import Path
 import bpy
 from bpy.props import StringProperty, CollectionProperty
 
-from x4.compiled_model import CompiledModel
+from x4.actor_file import ActorFile
 from x4.file_utils import FileBuffer
 from x4.import_xac import import_actor
 from x4.import_xmf import import_xmf
@@ -88,7 +88,7 @@ class X4_OT_XACImport(ImportOperatorHelper):
         for file in self.files:
             filepath = directory / file.name
             with FileBuffer(filepath) as f:
-                cf = CompiledModel.from_buffer(f)
+                cf = ActorFile.from_buffer(f)
                 import_actor(cf, filepath)
         return {'FINISHED'}
 

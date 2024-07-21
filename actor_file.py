@@ -6,7 +6,7 @@ from typing import List
 from x4.compiled_file import CompiledFile, CompiledHeader, ActorChunkId, Nodes, Mesh, SkinningInfo, StdMaterial, Node
 
 
-class CompiledModel(CompiledFile):
+class ActorFile(CompiledFile):
 
     @classmethod
     def is_valid_header(cls, header: CompiledHeader):

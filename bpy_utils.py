@@ -53,3 +53,8 @@ def add_weights(bone_indices: np.ndarray, bone_weights: np.ndarray, bone_names: 
         for index, weight in zip(index_group, weight_group):
             if weight > 0:
                 weight_groups[bone_names[index]].add([n], weight, 'REPLACE')
+
+
+def clear_selection():
+    for obj in bpy.context.selected_objects:
+        obj.select_set(False)

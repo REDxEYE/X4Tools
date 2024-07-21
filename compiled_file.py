@@ -2,16 +2,22 @@
 #  All rights reserved.
 
 
-#
 import warnings
+from abc import ABC
 from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import Callable, Any, Optional
+from typing import Callable, Any, Optional, TypeVar
 
 import numpy as np
 
 from x4.file_utils import Buffer, WritableMemoryBuffer
+
+
+class ActorChunk(ABC):
+
+    def to_buffer(self, buffer: Buffer):
+        pass
 
 
 class ActorChunkId(IntEnum):
@@ -72,7 +78,7 @@ class CompiledHeader:
 
 
 @dataclass
-class MetaData:
+class MetaData(ActorChunk):
     reposition_mask: int
     repositioning_node: int
     exporter_high_version: int
@@ -163,7 +169,7 @@ class Node:
 
 
 @dataclass
-class Nodes:
+class Nodes(ActorChunk):
     roots: list[Node]
     flat_list: list[Node]
 
@@ -224,7 +230,7 @@ class Layer:
 
 
 @dataclass
-class StdMaterial:
+class StdMaterial(ActorChunk):
     name: str
     unk1: int
     ambient: tuple[float, ...]
@@ -358,7 +364,7 @@ class Attribute:
 
 
 @dataclass
-class Mesh:
+class Mesh(ActorChunk):
     node_id: int
     infl_ranges: int
     vert_count: int
@@ -466,7 +472,7 @@ class MorphTarget:
 
 
 @dataclass
-class StdMorphTargets:
+class StdMorphTargets(ActorChunk):
     target_lod_index: int
     targets: list[MorphTarget]
 
@@ -492,7 +498,7 @@ class StdMorphTargets:
 
 
 @dataclass
-class SkinningInfo:
+class SkinningInfo(ActorChunk):
     node_id: int
     local_bone_count: int
     used_in_collision: int
@@ -532,7 +538,7 @@ class SkinningInfo:
 
 
 @dataclass
-class MeshLodLevels:
+class MeshLodLevels(ActorChunk):
     lod_level: int
     lods: list[int]
 
@@ -544,7 +550,7 @@ class MeshLodLevels:
 
 
 @dataclass
-class MaterialTotal:
+class MaterialTotal(ActorChunk):
     total_materials: int
     std_material_count: int
     fx_material_count: int
@@ -575,11 +581,13 @@ CHUNK_READERS: dict[tuple[int, int], Callable[['CompiledFile', Buffer], Any]] = 
     (ActorChunkId.MESHLODLEVELS, 1): MeshLodLevels.from_buffer_v1,
 }
 
+ChunkType = TypeVar('ChunkType', bound=ActorChunk)
+
 
 class CompiledFile:
 
     def __init__(self):
-        self.chunks: dict[ActorChunkId, list[Any]] = defaultdict(list)
+        self.chunks: dict[ActorChunkId, list[ActorChunk]] = defaultdict(list)
 
     @classmethod
     def from_buffer(cls, buffer: Buffer):
@@ -614,11 +622,15 @@ class CompiledFile:
 
         return file
 
-    def get_chunks(self, c_type: ActorChunkId) -> list[Any]:
+    def get_chunks(self, c_type: ActorChunkId) -> list[ChunkType]:
         return self.chunks[c_type]
 
-    def get_chunk(self, c_type: ActorChunkId) -> Any:
+    def get_chunk(self, c_type: ActorChunkId) -> ChunkType:
         chunk_group = self.chunks[c_type]
         if len(chunk_group) > 1:
             raise ValueError(f"More than one chunk in {c_type} group")
         return chunk_group[0]
+
+    def add_chunk(self, chunk_type: ActorChunkId, chunk: ChunkType):
+        self.chunks[chunk_type].append(chunk)
+        return chunk

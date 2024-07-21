@@ -18,12 +18,13 @@ from x4.material_utils import create_material, add_material
 def build_matrix(node: Node):
     quat = Quaternion([node.quat[3], node.quat[0], -node.quat[2], node.quat[1]])
     pos = Vector((node.pos[0], -node.pos[2], node.pos[1]))
-    scale = Vector((node.scale[0], -node.scale[2], node.scale[1]))
+    scale = Vector((node.scale[0], node.scale[2], node.scale[1]))
     return Matrix.LocRotScale(pos, quat, scale)
 
 
 def mark_nodes(influences, meshes, roots):
     node_types: dict[int, NodeType] = defaultdict(lambda: NodeType.Node)
+    node_types[0] = NodeType.Bone
     node_to_mesh: dict[int, Mesh] = {}
     for mesh in meshes:
         node_to_mesh[mesh.node_id] = mesh
@@ -82,23 +83,36 @@ def create_skeleton(model_collection, name, node_types, nodes):
     def create_bone(node: Node, parent: bpy.types.EditBone | None):
         bl_bone = armature.edit_bones.new(node.name)
         matrix = build_matrix(node)
-
-        if node.parent_id != -1:
+        if parent is not None:
             bl_bone.parent = parent
-            matrix = matrices[node.parent_id] @ matrix
+            matrix = matrices[node.parent.name] @ matrix
         bl_bone.matrix = matrix
+        # bl_bone.tail = bl_bone.head + Vector((0, 0, 3))
         bl_bone.tail = bl_bone.head + (matrix.to_3x3() @ Vector((5, 0, 0)))
 
-        matrices[node.id] = matrix
+        matrices[node.name] = matrix
 
         for child in node.children:
             create_bone(child, bl_bone)
+
+    def pose_bone(node: Node):
+        bone = armature_obj.pose.bones[node.name]
+        bone.matrix = build_matrix(node)
+        # bone.matrix = matrices[node.name]
+
+        for child in node.children:
+            pose_bone(child)
 
     for root in nodes:
         if node_types[root.id] != NodeType.Bone:
             continue
         create_bone(root, None)
-
+    # bpy.ops.object.mode_set(mode='POSE')
+    # for root in nodes:
+    #     if node_types[root.id] != NodeType.Bone:
+    #         continue
+    #     pose_bone(root)
+    # bpy.ops.pose.armature_apply(selected=False)
     bpy.ops.object.mode_set(mode='OBJECT')
     return armature_obj
 
@@ -122,6 +136,7 @@ def import_actor(cf, path):
     bpy.context.scene.collection.children.link(model_collection)
 
     arm_obj = create_skeleton(model_collection, name, node_types, roots)
+    arm_name = arm_obj.name
 
     def process_mesh(node: Node):
         mesh = node_to_mesh[node.id]
@@ -142,8 +157,9 @@ def import_actor(cf, path):
             for bone_id in np.unique(submesh.bone_ids):
                 used_nodes.add(nodes[bone_id].name)
         position = mesh.vertex_attributes[VertexAttributeType.POSITION][0].data.copy()
-        position[:, [1, 2]] = position[:, [2, 1]]
+        # position[:, [1, 2]] = position[:, [2, 1]]
         position[:, 1] *= -1
+        position[:, 2] *= -1
         mesh_data.from_pydata(position, [], indices.reshape(-1, 3))
         used_materials = np.unique(material_ids)
         for mat_id in used_materials:
@@ -154,8 +170,10 @@ def import_actor(cf, path):
         indices = np.searchsorted(used_materials, material_ids)
         mesh_data.polygons.foreach_set('material_index', indices)
         normal = mesh.vertex_attributes[VertexAttributeType.NORMAL][0].data.copy()
-        normal[:, [1, 2]] = normal[:, [2, 1]]
+        # normal[:, [1, 2]] = normal[:, [2, 1]]
         normal[:, 1] *= -1
+        normal[:, 2] *= -1
+        # normal[:, 0] *= -1
         add_custom_normals(normal, mesh_data)
 
         for i, uv in enumerate(mesh.vertex_attributes[VertexAttributeType.UV]):
@@ -220,3 +238,4 @@ def import_actor(cf, path):
         if node_types[root.id] == NodeType.Bone:
             continue
         process_node(root, None)
+    return bpy.data.objects[arm_name]
