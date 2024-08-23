@@ -25,6 +25,7 @@ def import_xmf(model_path, sm: StaticModel):
     mesh_data.from_pydata(position, [], indices)
     normals = (vertices["normal0"][:, :3].astype(np.float32) / 255 * 2) - 1
     normals[:, :] = normals[:, [2, 0, 1]]
+    mesh_data.polygons.foreach_set("use_smooth", np.ones(len(mesh_data.polygons), np.uint32))
     add_custom_normals(normals, mesh_data)
     for i in range(8):
         uv_name = f"texcoord{i}"

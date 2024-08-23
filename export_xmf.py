@@ -48,103 +48,106 @@ def export_xmf(context):
     return static_model
 
 
-def prepare_mesh(selected_mesh_objects, attributes):
-    material_dict = {}
-    tmp_mesh = bpy.data.meshes.new('tmp_mesh')
-    bm = bmesh.new()
-    tmp_bm = bmesh.new()
-    for obj in selected_mesh_objects:
-        mesh: bpy.types.Mesh = obj.data
-        for mat in mesh.materials:
-            if mat.name not in material_dict:
-                material_dict[mat.name] = len(material_dict)
-        tmp_bm.clear()
-        tmp_bm.from_mesh(mesh)
-        tmp_bm.normal_update()
-        tmp_bm.transform(obj.matrix_world)
-        bmesh.ops.triangulate(tmp_bm, faces=bm.faces[:])
-        tmp_bm.to_mesh(tmp_mesh)
-        bm.from_mesh(tmp_mesh)
-        bm.normal_update()
-    del mesh
-    a = bpy.data.objects.new('tmp', tmp_mesh.copy())
-    bpy.context.collection.objects.link(a)
-    tmp_mesh.clear_geometry()
-    tmp_mesh.materials.clear()
-    bm.to_mesh(tmp_mesh)
-    bm.clear()
-    bm.free()
-    del bm
-    for mat_name in sorted(material_dict.keys(), key=lambda x: material_dict[x]):
-        tmp_mesh.materials.append(bpy.data.materials[mat_name])
+def pre_process_mesh(source: bpy.types.Object) -> bpy.types.Mesh:
+    copied = source.copy()
+    copied.modifiers.new("Triangulate", "TRIANGULATE")
 
-    material_names = [mat.name for mat in tmp_mesh.materials]
+    dg = bpy.context.evaluated_depsgraph_get()
+    mesh = bpy.data.meshes.new_from_object(copied.evaluated_get(dg), preserve_all_data_layers=True, depsgraph=dg)
+    mesh.name = source.name + "_baked"
+    return mesh
+
+
+def prepare_mesh(selected_mesh_objects, attributes):
+    max_uv = 0
+    max_vcol = 0
+    total_face_count = 0
+    total_loops_count = 0
+    processed_meshes = [pre_process_mesh(obj) for obj in selected_mesh_objects]
+
+    for mesh in processed_meshes:
+        max_uv = max(max_uv, len(mesh.uv_layers))
+        max_vcol = max(max_vcol, len(mesh.vertex_colors))
+        mesh.calc_tangents(uvmap=mesh.uv_layers[0].name)
+        total_face_count += len(mesh.polygons)
+        total_loops_count += len(mesh.loops) // 3
+
+    # material_names = [mat.name for mat in tmp_mesh.materials]
 
     vertices = []
     vertices_map = {}
 
-    tmp_mesh.calc_tangents(uvmap=tmp_mesh.uv_layers[0].name)
     vertex_items = [
         ("position0", np.float32, (3,)),
         ("normal0", np.uint8, (4,)),
         ("tangent0", np.uint8, (4,)),
     ]
-    for i in range(len(tmp_mesh.uv_layers)):
+    for i in range(max_uv):
         vertex_items.append((f"texcoord{i}", np.float32, (2,)))
         attributes.append(Attribute(D3DAttributeType.FLOAT2, AttributeUsage.TEXCOORD, i, 0, 0), )
-    for i in range(len(tmp_mesh.vertex_colors)):
+    for i in range(max_vcol):
         vertex_items.append((f"color{i}", np.uint8, (4,)))
         attributes.append(Attribute(D3DAttributeType.D3DCOLOR, AttributeUsage.COLOR, i, 0, 0), )
+
     vertex_dtype = np.dtype(vertex_items)
     del vertex_items
-    vertex_array: np.ndarray = np.zeros(len(tmp_mesh.loops), vertex_dtype)
-    indices_array: np.ndarray = np.zeros((len(tmp_mesh.polygons), 4), np.uint32)
+    vertex_array: np.ndarray = np.zeros(total_loops_count * 2, vertex_dtype)
+    indices_array: np.ndarray = np.zeros((total_loops_count, 4), np.uint32)
     material_ranges = [0]
-    curr_material_index = tmp_mesh.polygons[0].material_index
-    for face_id, face in enumerate(tmp_mesh.polygons):
-        for loop_index, loop_id in enumerate(face.loop_indices):
-            loop = tmp_mesh.loops[loop_id]
-            bpy_vertex = tmp_mesh.vertices[loop.vertex_index]
-            all_uvs = []
-            for uv_layer in tmp_mesh.uv_layers:
-                all_uvs.append(uv_layer.uv[loop.vertex_index].vector.to_tuple())
-            normal = loop.normal
-            # normal = tmp_mesh.corner_normals[loop.index].vector
-            pos = bpy_vertex.co
-            tangent = loop.tangent
+    curr_material_name = ""
 
-            vertex = (
-                loop.vertex_index,
-                pos.to_tuple(),
-                normal.to_tuple(),
-                tangent.to_tuple(),
-                tuple(all_uvs),
-            )
-            vertex_index = vertices_map.get(vertex, None)
-            if vertex_index is None:
-                vertices_map[vertex] = vertex_index = len(vertices)
-                vertices.append(vertex)
-                vertex_array[vertex_index]["position0"] = pos
-                vertex_array[vertex_index]["normal0"][:3] = ((normal + ONE) / 2) * 255 + (ONE / 2)
-                vertex_array[vertex_index]["tangent0"][:3] = ((tangent + ONE) / 2) * 255 + (ONE / 2)
-                for uv_index, uv in enumerate(all_uvs):
-                    vertex_array[vertex_index][f"texcoord{uv_index}"] = uv[0], 1 - uv[1]
+    index_offset = 0
+    index_write_offset = 0
+    global_material_map = {}
+    for mesh in processed_meshes:
+        mesh_materials = [mat.name for mat in mesh.materials]
+        local_indices_array: np.ndarray = np.zeros((len(mesh.loops) // 3, 4), np.uint32)
+        for face_id, face in enumerate(mesh.polygons):
+            for loop_index, loop_id in enumerate(face.loop_indices):
+                loop = mesh.loops[loop_id]
+                bpy_vertex = mesh.vertices[loop.vertex_index]
+                all_uvs = []
+                for uv_layer in mesh.uv_layers:
+                    all_uvs.append(tuple(np.round(uv_layer.uv[loop.vertex_index].vector, 5)))
+                normal = loop.normal
+                # normal = mesh.vertex_normals[loop.index].vector
+                pos = bpy_vertex.co
+                tangent = loop.tangent
 
-                for color_index, color_layer in enumerate(tmp_mesh.vertex_colors):
-                    vertex_array[vertex_index][f"color{color_index}"] = np.asarray(
-                        color_layer.data[loop.vertex_index].color, np.float32) * 255
+                vertex = (
+                    loop.vertex_index,
+                    tuple(np.round(normal, 5)),
+                    tuple(all_uvs),
+                )
+                vertex_index = vertices_map.get(vertex, None)
+                if vertex_index is None:
+                    vertices_map[vertex] = vertex_index = len(vertices)
+                    vertices.append(vertex)
+                    vertex_array[vertex_index]["position0"] = pos
+                    vertex_array[vertex_index]["normal0"][:3] = np.round(((normal + ONE) / 2) * 255)
+                    vertex_array[vertex_index]["tangent0"][:3] = np.round(((tangent + ONE) / 2) * 255)
 
-            indices_array[face_id, loop_index] = vertex_index
-            indices_array[face_id, 3] = face.material_index
-        if face.material_index != curr_material_index:
-            curr_material_index = face.material_index
-            material_ranges.append(face_id)
-    material_ranges.append(len(tmp_mesh.polygons))
+                    for uv_index, uv_layer in enumerate(mesh.uv_layers):
+                        uv = uv_layer.uv[loop.vertex_index].vector
+                        vertex_array[vertex_index][f"texcoord{uv_index}"] = uv[0], 1 - uv[1]
 
-    bpy.data.meshes.remove(tmp_mesh)
-    del tmp_mesh
+                    for color_index, color_layer in enumerate(mesh.vertex_colors):
+                        vertex_array[vertex_index][f"color{color_index}"] = np.asarray(
+                            color_layer.data[loop.vertex_index].color, np.float32) * 255
+
+                local_indices_array[face_id, loop_index] = vertex_index
+                local_indices_array[face_id, 3] = face.material_index
+            # if face.material_index != curr_material_index:
+            #     curr_material_index = face.material_index
+            #     material_ranges.append(face_id)
+        indices_array[index_write_offset:index_write_offset + len(local_indices_array)] = local_indices_array
+        index_write_offset += len(local_indices_array)
+    # material_ranges.append(len(tmp_mesh.polygons))
+
+    # bpy.data.meshes.remove(tmp_mesh)
+    # del tmp_mesh
     vertex_array = vertex_array[:len(vertices)]
     del vertices
     del vertices_map
-
+    material_names = []
     return indices_array, material_ranges, vertex_array, material_names
