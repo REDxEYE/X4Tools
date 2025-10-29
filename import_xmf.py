@@ -1,4 +1,4 @@
-#  Copyright 2024 by REDxEYE.
+#  Copyright 2025 by REDxEYE.
 #  All rights reserved.
 
 
@@ -19,7 +19,7 @@ def import_xmf(model_path, sm: StaticModel):
     vertex_buffer = sm.buffers[0]
     index_buffer = sm.buffers[1]
     vertices = vertex_buffer.get_data()
-    indices = np.frombuffer(index_buffer.data, np.uint16 if index_buffer.format == 30 else np.uint32).reshape(-1, 3)
+    indices = index_buffer.get_data()["vertex_indices0"].reshape(-1,3)
     position = vertices["position0"].copy()
     position[:, [1, 2]] = position[:, [2, 1]]
     mesh_data.from_pydata(position, [], indices)
@@ -38,9 +38,9 @@ def import_xmf(model_path, sm: StaticModel):
     material_indices = np.zeros(sm.index_count // 3, np.uint32)
     for strip in sm.strips:
         mat = create_material(strip.name)
-
-        material_indices[strip.start_index // 3:strip.start_index // 3 + strip.count // 3] = add_material(mat,
-                                                                                                          mesh_obj)
+        start_index = strip.start_index // 3
+        face_count = strip.count // 3
+        material_indices[start_index:start_index + face_count] = add_material(mat, mesh_obj)
     mesh_data.polygons.foreach_set('material_index', material_indices)
     mesh_obj.select_set(True)
     bpy.context.view_layer.objects.active = mesh_obj

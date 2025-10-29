@@ -1,4 +1,4 @@
-#  Copyright 2024 by REDxEYE.
+#  Copyright 2025 by REDxEYE.
 #  All rights reserved.
 
 import abc
@@ -7,7 +7,7 @@ import contextlib
 import io
 import os
 import struct
-from pathlib import Path
+from x4.tiny_path import TinyPath
 from struct import calcsize, pack, unpack
 from typing import Optional, Protocol, Union, TypeVar, Type
 
@@ -316,7 +316,7 @@ class WritableMemoryBuffer(io.BytesIO, Buffer):
 
 class FileBuffer(io.FileIO, Buffer):
 
-    def __init__(self, file: Union[str, Path, int], mode: str = 'r', closefd: bool = True, opener=None) -> None:
+    def __init__(self, file: Union[str, TinyPath, int], mode: str = 'r', closefd: bool = True, opener=None) -> None:
         io.FileIO.__init__(self, file, mode, closefd, opener)
         Buffer.__init__(self)
         self._cached_size = None
@@ -343,7 +343,7 @@ class FileBuffer(io.FileIO, Buffer):
         self.seek(offset)
         return _data
 
-    def __str__(self) -> str:
+    def __repr__(self) -> str:
         return f'<FileBuffer: {self.name!r} {self.tell()}/{self.size()}>'
 
     def slice(self, offset: Optional[int] = None, size: int = -1) -> 'MemorySlice':

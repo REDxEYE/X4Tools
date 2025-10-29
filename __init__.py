@@ -1,8 +1,8 @@
-#  Copyright 2024 by REDxEYE.
+#  Copyright 2025 by REDxEYE.
 #  All rights reserved.
 
 
-from pathlib import Path
+from x4.tiny_path import TinyPath
 
 import bpy
 from bpy.props import StringProperty, CollectionProperty
@@ -65,9 +65,9 @@ class ImportOperatorHelper(bpy.types.Operator):
 
     def get_directory(self):
         if is_blender_4_1():
-            return Path(self.directory)
+            return TinyPath(self.directory)
         else:
-            filepath = Path(self.filepath)
+            filepath = TinyPath(self.filepath)
             if filepath.is_file():
                 return filepath.parent.absolute()
             else:

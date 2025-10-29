@@ -1,8 +1,8 @@
-#  Copyright 2024 by REDxEYE.
+#  Copyright 2025 by REDxEYE.
 #  All rights reserved.
 
 import random
-from pathlib import Path
+from x4.tiny_path import TinyPath
 from typing import cast
 
 import bpy
@@ -127,7 +127,7 @@ class Nodes:
     ShaderNodeFrame = 'NodeFrame'
 
 
-def load_image_from_path(texture_path: Path):
+def load_image_from_path(texture_path: TinyPath):
     return bpy.data.images.load(texture_path.as_posix())
 
 

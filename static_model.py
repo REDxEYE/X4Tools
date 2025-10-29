@@ -1,4 +1,4 @@
-#  Copyright 2024 by REDxEYE.
+#  Copyright 2025 by REDxEYE.
 #  All rights reserved.
 
 from dataclasses import dataclass, field
@@ -11,57 +11,62 @@ from zlib import decompress, compress, Z_BEST_COMPRESSION
 
 
 class PrimitiveType(IntEnum):
-    POINTLIST = 1,
-    LINELIST = 2,
-    LINESTRIP = 3,
-    TRIANGLELIST = 4,
-    TRIANGLESTRIP = 5,
-    TRIANGLEFAN = 6,
+    POINTLIST = 1
+    LINELIST = 2
+    LINESTRIP = 3
+    TRIANGLELIST = 4
+    TRIANGLESTRIP = 5
+    TRIANGLEFAN = 6
 
 
-class D3DAttributeType(IntEnum):
+class AttributeType(IntEnum):
     INVALID = -1
-    FLOAT1 = 0,
-    FLOAT2 = 1,
-    FLOAT3 = 2,
-    FLOAT4 = 3,
-    D3DCOLOR = 4,
-    UBYTE4 = 5,
-    SHORT2 = 6,
-    SHORT4 = 7,
-    UBYTE4N = 8,
-    SHORT2N = 9,
-    SHORT4N = 10,
-    USHORT2N = 11,
-    USHORT4N = 12,
-    UDEC3 = 13,
-    DEC3N = 14,
-    FLOAT16_2 = 15,
-    FLOAT16_4 = 16,
+    FLOAT1 = 0
+    FLOAT2 = 1
+    FLOAT3 = 2
+    FLOAT4 = 3
+    D3DCOLOR = 4
+    UBYTE4 = 5
+    SHORT2 = 6
+    SHORT4 = 7
+    UBYTE4N = 8
+    SHORT2N = 9
+    SHORT4N = 10
+    USHORT2N = 11
+    USHORT4N = 12
+    UDEC3 = 13
+    DEC3N = 14
+    FLOAT16_2 = 15
+    FLOAT16_4 = 16
     UNUSED = 17
+
+    UINT16 = 30
+    UINT32 = 31
 
 
 class AttributeUsage(IntEnum):
     INVALID = -1
-    POSITION = 0,
-    BLENDWEIGHT = 1,
-    BLENDINDICES = 2,
-    NORMAL = 3,
-    PSIZE = 4,
-    TEXCOORD = 5,
-    TANGENT = 6,
-    BINORMAL = 7,
-    TESSFACTOR = 8,
-    POSITIONT = 9,
-    COLOR = 10,
-    FOG = 11,
-    DEPTH = 12,
+    POSITION = 0
+    BLENDWEIGHT = 1
+    BLENDINDICES = 2
+    NORMAL = 3
+    PSIZE = 4
+    TEXCOORD = 5
+    TANGENT = 6
+    BINORMAL = 7
+    TESSFACTOR = 8
+    POSITIONT = 9
+    COLOR = 10
+    FOG = 11
+    DEPTH = 12
     SAMPLE = 13
+
+    VERTEX_INDICES = 30
 
 
 @dataclass
 class Attribute:
-    type: D3DAttributeType
+    type: AttributeType
     usage: AttributeUsage
     index: int
     pad0: int = 0
@@ -69,7 +74,7 @@ class Attribute:
 
     @classmethod
     def from_buffer(cls, buffer: Buffer) -> 'Attribute':
-        return cls(D3DAttributeType(buffer.read_int32()), AttributeUsage(buffer.read_uint8()), *buffer.read_fmt("3b"))
+        return cls(AttributeType(buffer.read_int32()), AttributeUsage(buffer.read_uint8()), *buffer.read_fmt("3b"))
 
     def to_buffer(self, buffer: Buffer):
         buffer.write_fmt("i4b", self.type, self.usage, self.index, self.pad0, self.pad1)
@@ -81,64 +86,89 @@ class CompressedBuffer:
     usage_id: int
     c_offset: int
     compressed: int
-    unk4: float
+    normalized_size: float
     format: int
     c_size: int
     item_count: int
     item_size: int
     section_count: int
-    unk10: int = 0
-    unk11: int = 0.0
-    unk12: float = 0
+    min_data_value: float
+    max_data_value: float
     attributes: list[Attribute] = field(default_factory=list)
 
     data: bytes = field(init=False, default=b"", repr=False)
 
     @classmethod
     def from_buffer(cls, buffer: Buffer):
-        (type_id, usage_id, c_offset, compressed, unk4, format_id, c_size, item_count, item_size, section_count, unk10,
-         unk11, unk12,
-         used_attrib_count,) = buffer.read_fmt("4if7idi")
-        attributes = [Attribute.from_buffer(buffer) for _ in range(16)]
+        (type_id, usage_id, c_offset, compressed, unk4, format_id, c_size, item_count, item_size,
+         section_count) = buffer.read_fmt("4if5i")
+        unk10 = buffer.read_double()
+        unk11 = buffer.read_double()
+        used_attrib_count = buffer.read_int32()
+        attributes = [Attribute.from_buffer(buffer) for _ in range(used_attrib_count)]
+        buffer.skip(8 * (16 - used_attrib_count))
+        if type_id == 30:
+            attributes.append(Attribute(AttributeType(format_id), AttributeUsage.VERTEX_INDICES, 0, 0, 0))
+        elif used_attrib_count == 0:
+            usage = {
+                0: AttributeUsage.POSITION,
+                1: AttributeUsage.POSITION,
+                2: AttributeUsage.NORMAL,
+                3: AttributeUsage.NORMAL,
+                4: AttributeUsage.TANGENT,
+                5: AttributeUsage.BINORMAL,
+                8: AttributeUsage.COLOR,
+                20: AttributeUsage.PSIZE,
+            }.get(type_id, AttributeUsage.TEXCOORD)
+            attributes.append(Attribute(AttributeType(format_id), usage, 0, 0, 0))
+            format_id = 32
+            usage_id = 0
+            type_id = 0
+
         return cls(type_id, usage_id, c_offset, compressed, unk4, format_id, c_size, item_count, item_size,
-                   section_count, unk10, unk11, unk12, attributes[:used_attrib_count])
+                   section_count, unk10, unk11, attributes)
 
     def get_data(self) -> np.ndarray:
         items = []
         for attribute in self.attributes:
             attr_name = f"{attribute.usage.name.lower()}{attribute.index}"
             match attribute.type:
-                case D3DAttributeType.FLOAT1:
+                case AttributeType.FLOAT1:
                     items.append((attr_name, np.float32, (1,)))
-                case D3DAttributeType.FLOAT2:
+                case AttributeType.FLOAT2:
                     items.append((attr_name, np.float32, (2,)))
-                case D3DAttributeType.FLOAT3:
+                case AttributeType.FLOAT3:
                     items.append((attr_name, np.float32, (3,)))
-                case D3DAttributeType.FLOAT4:
+                case AttributeType.FLOAT4:
                     items.append((attr_name, np.float32, (4,)))
-                case D3DAttributeType.D3DCOLOR | D3DAttributeType.UBYTE4 | D3DAttributeType.UBYTE4N:
+                case AttributeType.D3DCOLOR | AttributeType.UBYTE4 | AttributeType.UBYTE4N:
                     items.append((attr_name, np.uint8, (4,)))
-                case D3DAttributeType.SHORT2 | D3DAttributeType.SHORT2N:
+                case AttributeType.SHORT2 | AttributeType.SHORT2N:
                     items.append((attr_name, np.int16, (2,)))
-                case D3DAttributeType.SHORT4 | D3DAttributeType.SHORT4N:
+                case AttributeType.SHORT4 | AttributeType.SHORT4N:
                     items.append((attr_name, np.int16, (4,)))
-                case D3DAttributeType.USHORT2N:
+                case AttributeType.USHORT2N:
                     items.append((attr_name, np.uint16, (2,)))
-                case D3DAttributeType.USHORT4N:
+                case AttributeType.USHORT4N:
                     items.append((attr_name, np.uint16, (2,)))
-                case D3DAttributeType.FLOAT16_2:
+                case AttributeType.FLOAT16_2:
                     items.append((attr_name, np.float16, (2,)))
-                case D3DAttributeType.FLOAT16_4:
+                case AttributeType.FLOAT16_4:
                     items.append((attr_name, np.float16, (4,)))
+                case AttributeType.UINT16:
+                    items.append((attr_name, np.uint16, (1,)))
+                case AttributeType.UINT32:
+                    items.append((attr_name, np.uint32, (1,)))
                 case _:
                     raise ValueError(f"Unknown attribute type {attribute.type!r}")
         dtype = np.dtype(items)
         return np.frombuffer(self.data, dtype)
 
     def to_buffer(self, buffer: Buffer):
-        buffer.write_fmt("4if7id", self.type, self.usage_id, self.c_offset, self.compressed, self.unk4, self.format,
-                         self.c_size, self.item_count, self.item_size, self.section_count, self.unk10, self.unk11,
-                         self.unk12)
+        buffer.write_fmt("4if5i2d", self.type, self.usage_id, self.c_offset, self.compressed, self.normalized_size,
+                         self.format,
+                         self.c_size, self.item_count, self.item_size, self.section_count, self.min_data_value,
+                         self.max_data_value)
         buffer.write_uint32(len(self.attributes))
         for attribute in self.attributes:
             attribute.to_buffer(buffer)
@@ -162,6 +192,7 @@ class MaterialStrip:
 
 @dataclass
 class StaticModel:
+    version: int
     buffers: list[CompressedBuffer]
     strips: list[MaterialStrip]
     vertex_count: int
@@ -179,7 +210,7 @@ class StaticModel:
          buffer_count, buffer_info_size, strip_count, strip_info_size,
          cw_culling, right_hand) = buffer.read_fmt("10B")
         if version_maj != 3:
-            return None
+            raise ValueError(f"Unsupported XUMF version: {version_maj}")
         if endian:
             buffer.set_big_endian()
         (vertex_count, index_count, prim_type, mesh_optimizations) = buffer.read_fmt("4I")
@@ -199,7 +230,8 @@ class StaticModel:
             else:
                 compressed_buffer.data = data
 
-        return cls(compressed_buffers, strips, vertex_count, index_count, PrimitiveType(prim_type), bbox_center,
+        return cls(version_maj, compressed_buffers, strips, vertex_count, index_count, PrimitiveType(prim_type),
+                   bbox_center,
                    bbox_size)
 
     def to_buffer(self, buffer: Buffer):

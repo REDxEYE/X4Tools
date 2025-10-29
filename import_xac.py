@@ -1,9 +1,9 @@
-#  Copyright 2024 by REDxEYE.
+#  Copyright 2025 by REDxEYE.
 #  All rights reserved.
 
 from collections import defaultdict
 from enum import Enum
-from pathlib import Path
+from x4.tiny_path import TinyPath
 
 import bpy
 import numpy as np
@@ -131,7 +131,7 @@ def import_actor(cf, path):
     matrices = {}
     objects = {}
 
-    name = Path(path).stem
+    name = TinyPath(path).stem
     model_collection = bpy.data.collections.new(name)
     bpy.context.scene.collection.children.link(model_collection)
 
